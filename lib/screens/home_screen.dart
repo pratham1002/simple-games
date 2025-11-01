@@ -1,6 +1,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:senior_games/screens/crossword_screen.dart';
+import 'package:senior_games/screens/word_search_screen.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -36,13 +37,15 @@ class HomeScreen extends StatelessWidget {
             ),
             const SizedBox(height: 20),
             ElevatedButton(
-              onPressed: null, // Disabled
-              child: const Text('🎨 Ball Sort (coming soon)'),
-            ),
-            const SizedBox(height: 20),
-            ElevatedButton(
-              onPressed: null, // Disabled
-              child: const Text('🍉 Fruit Slice (coming soon)'),
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const WordSearchScreen(),
+                  ),
+                );
+              },
+              child: const Text('🔍 Word Search'),
             ),
           ],
         ),

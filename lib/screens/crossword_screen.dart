@@ -19,8 +19,55 @@ class CrosswordScreen extends StatelessWidget {
   }
 }
 
-class CrosswordView extends StatelessWidget {
+class CrosswordView extends StatefulWidget {
   const CrosswordView({super.key});
+
+  @override
+  State<CrosswordView> createState() => _CrosswordViewState();
+}
+
+class _CrosswordViewState extends State<CrosswordView> {
+  void _showCompletionDialog(CrosswordState state) {
+    if (!mounted) return;
+
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.hideCurrentSnackBar();
+    messenger.showSnackBar(
+      const SnackBar(
+        content: Text('Great job! You solved the puzzle!'),
+        duration: Duration(seconds: 3),
+      ),
+    );
+
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Puzzle Complete'),
+          content: const Text(
+            'You filled in every word correctly! What would you like to do next?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(dialogContext).pop();
+                Navigator.of(context).pop(); // Go back to home screen
+              },
+              child: const Text('Go to Home Page'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.of(dialogContext).pop();
+                state.generateNewCrossword();
+              },
+              child: const Text('New Puzzle'),
+            ),
+          ],
+        );
+      },
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -39,14 +86,22 @@ class CrosswordView extends StatelessWidget {
           return Column(
             children: [
               Expanded(
-                child: CrosswordGrid(crossword: state.crossword!),
+                flex: 3,
+                child: CrosswordGrid(
+                  crossword: state.crossword!,
+                  onSolved: () => _showCompletionDialog(state),
+                ),
               ),
-              ClueList(clues: state.crossword!.clues),
+              Expanded(
+                flex: 2,
+                child: ClueList(clues: state.crossword!.clues),
+              ),
               Padding(
                 padding: const EdgeInsets.all(8.0),
                 child: ElevatedButton(
                   onPressed: () {
-                    Provider.of<CrosswordState>(context, listen: false).generateNewCrossword();
+                    Provider.of<CrosswordState>(context, listen: false)
+                        .generateNewCrossword();
                   },
                   child: const Text('New Puzzle'),
                 ),
@@ -80,22 +135,37 @@ class CrosswordState extends ChangeNotifier {
     _crossword = null;
     notifyListeners();
 
-    for (int i = 0; i < 10; i++) {
-      final words = WordGenerator.getRandomWords(8);
-      final generatedCrossword = await compute(WordGenerator.generateCrossword, words);
+    Crossword? generatedCrossword;
+    
+    // Try multiple times with different word sets
+    for (int i = 0; i < 20; i++) {
+      try {
+        final words = WordGenerator.getRandomWords(6); // Reduced to 6 for better success rate
+        if (words.length < 2) continue;
+        
+        generatedCrossword = await compute(WordGenerator.generateCrossword, words);
 
-      if (generatedCrossword != null) {
-        final grid = generatedCrossword.grid.map((row) => row.map((letter) => Cell(letter: letter)).toList()).toList();
-      
-      // Add cell numbers based on clues
-      for (var direction in generatedCrossword.clues.keys) {
-        for (var clue in generatedCrossword.clues[direction]!) {
-          grid[clue.row][clue.column].number = clue.number;
+        if (generatedCrossword != null && generatedCrossword.grid.isNotEmpty) {
+          final grid = generatedCrossword.grid.map((row) => row.map((letter) => Cell(letter: letter)).toList()).toList();
+        
+          // Validate grid dimensions
+          if (grid.isEmpty || grid[0].isEmpty) continue;
+          
+          // Add cell numbers based on clues
+          for (var direction in generatedCrossword.clues.keys) {
+            for (var clue in generatedCrossword.clues[direction]!) {
+              if (clue.row < grid.length && clue.column < grid[clue.row].length) {
+                grid[clue.row][clue.column].number = clue.number;
+              }
+            }
+          }
+        
+          _crossword = CrosswordModel(grid: grid, clues: generatedCrossword.clues);
+          break;
         }
-      }
-      
-      _crossword = CrosswordModel(grid: grid, clues: generatedCrossword.clues);
-      break;
+      } catch (e) {
+        // Continue trying if there's an error
+        continue;
       }
     }
 

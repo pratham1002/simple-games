@@ -79,8 +79,11 @@ class WordGenerator {
   static Crossword? generateCrossword(List<String> words) {
     if (words.isEmpty) return null;
     
+    // Work on a copy to avoid modifying the input
+    final wordsCopy = List<String>.from(words);
+    
     // Sort words by length (longest first) for better placement
-    words.sort((a, b) => b.length.compareTo(a.length));
+    wordsCopy.sort((a, b) => b.length.compareTo(a.length));
     
     // Generate multiple puzzles and select the best one
     final random = Random();
@@ -88,8 +91,8 @@ class WordGenerator {
     double bestDensity = 0.0;
     
     // Try generating multiple puzzles (fewer iterations for performance)
-    for (int attempt = 0; attempt < 50; attempt++) {
-      final puzzle = _generateSinglePuzzle(words, random);
+    for (int attempt = 0; attempt < 100; attempt++) {
+      final puzzle = _generateSinglePuzzle(wordsCopy, random);
       if (puzzle != null) {
         final density = puzzle.density;
         if (density > bestDensity) {
@@ -113,20 +116,25 @@ class WordGenerator {
     final grid = List.generate(height, (_) => List.filled(width, ' '));
     final placedWords = <PlacedWord>[];
     
-    // Place the first word randomly in the center
+    // Place the first word in the center
     final firstWord = words[0];
+    if (firstWord.length > width || firstWord.length > height) {
+      return null; // Word too long
+    }
+    
     final horizontal = random.nextBool();
     int startX, startY;
     
     if (horizontal) {
-      startX = random.nextInt(width - firstWord.length + 1);
+      startX = (width - firstWord.length) ~/ 2;
       startY = height ~/ 2;
     } else {
       startX = width ~/ 2;
-      startY = random.nextInt(height - firstWord.length + 1);
+      startY = (height - firstWord.length) ~/ 2;
     }
     
-    if (!_placeWord(firstWord, startX, startY, horizontal, grid, placedWords)) {
+    if (!_placeWord(firstWord, startX, startY, horizontal, grid, placedWords,
+        requireIntersection: false)) {
       return null;
     }
     
@@ -148,6 +156,7 @@ class WordGenerator {
       wordsToPlace = stillToPlace;
     }
     
+    // Need at least 2 words for a valid crossword
     if (placedWords.length < 2) {
       return null;
     }
@@ -185,9 +194,9 @@ class WordGenerator {
       for (int i = 0; i < word.length; i++) {
         final char = word[i];
         
-        // Check each character in the placed word
+        // Check each character in the placed word (case-insensitive)
         for (int j = 0; j < placedWord.word.length; j++) {
-          if (placedWord.word[j] == char) {
+          if (placedWord.word[j].toLowerCase() == char.toLowerCase()) {
             // Potential intersection found
             final horizontal = !placedWord.horizontal;
             int newX, newY;
@@ -223,8 +232,9 @@ class WordGenerator {
     int x,
     int y,
     bool horizontal,
-    List<List<String>> grid,
-  ) {
+    List<List<String>> grid, {
+    bool requireIntersection = true,
+  }) {
     final width = grid[0].length;
     final height = grid.length;
     
@@ -237,8 +247,8 @@ class WordGenerator {
       if (y < 0 || y + word.length > height) return false;
     }
     
-    // Check that we have at least one intersection
-    bool hasIntersection = false;
+    // Track whether we intersect with existing word if required
+    bool hasIntersection = !requireIntersection;
     
     // Check each position where we want to place the word
     for (int i = 0; i < word.length; i++) {
@@ -247,12 +257,7 @@ class WordGenerator {
       
       final existingChar = grid[checkY][checkX];
       
-      if (existingChar == word[i]) {
-        hasIntersection = true;
-      } else if (existingChar != ' ') {
-        // Cell is filled with a different character
-        return false;
-      } else {
+      if (existingChar == ' ') {
         // Cell is empty, check adjacent cells to prevent parallel words
         if (horizontal) {
           // Check cells above and below
@@ -263,13 +268,20 @@ class WordGenerator {
           if (checkX > 0 && grid[checkY][checkX - 1] != ' ') return false;
           if (checkX < width - 1 && grid[checkY][checkX + 1] != ' ') return false;
         }
+      } else {
+        // Cell is filled - check if it matches (case-insensitive)
+        if (existingChar.toLowerCase() != word[i].toLowerCase()) {
+          return false; // Different character
+        }
+        // Matching character - this is an intersection
+        hasIntersection = true;
       }
     }
     
-    // Must have at least one intersection
-    if (!hasIntersection) return false;
+    // Must have at least one intersection if required
+    if (requireIntersection && !hasIntersection) return false;
     
-    // Check ends of word - must be empty or out of bounds
+    // Check ends of word - must be empty
     if (horizontal) {
       if (x > 0 && grid[y][x - 1] != ' ') return false;
       if (x + word.length < width && grid[y][x + word.length] != ' ') return false;
@@ -277,6 +289,9 @@ class WordGenerator {
       if (y > 0 && grid[y - 1][x] != ' ') return false;
       if (y + word.length < height && grid[y + word.length][x] != ' ') return false;
     }
+    
+    // Additional check: ensure we're not creating invalid intersections
+    // (word should intersect properly with existing words)
     
     return true;
   }
@@ -288,19 +303,23 @@ class WordGenerator {
     int y,
     bool horizontal,
     List<List<String>> grid,
-    List<PlacedWord> placedWords,
-  ) {
-    if (!_canPlaceWord(word, x, y, horizontal, grid)) {
+    List<PlacedWord> placedWords, {
+    bool requireIntersection = true,
+  }) {
+    if (!_canPlaceWord(word, x, y, horizontal, grid,
+        requireIntersection: requireIntersection)) {
       return false;
     }
     
     if (horizontal) {
       for (int i = 0; i < word.length; i++) {
-        grid[y][x + i] = word[i];
+        // Use uppercase for consistency
+        grid[y][x + i] = word[i].toUpperCase();
       }
     } else {
       for (int i = 0; i < word.length; i++) {
-        grid[y + i][x] = word[i];
+        // Use uppercase for consistency
+        grid[y + i][x] = word[i].toUpperCase();
       }
     }
     
@@ -329,11 +348,25 @@ class WordGenerator {
       }
     }
     
+    // Validate that we found used cells
+    if (minX > maxX || minY > maxY) {
+      // No cells used, return original grid
+      return {
+        'grid': grid,
+        'offsetX': 0,
+        'offsetY': 0,
+      };
+    }
+    
     // Add padding
     minX = (minX - 1).clamp(0, grid[0].length - 1);
     minY = (minY - 1).clamp(0, grid.length - 1);
     maxX = (maxX + 1).clamp(0, grid[0].length - 1);
     maxY = (maxY + 1).clamp(0, grid.length - 1);
+    
+    // Ensure valid dimensions
+    if (maxX < minX) maxX = minX;
+    if (maxY < minY) maxY = minY;
     
     // Create trimmed grid
     final trimmedGrid = List.generate(

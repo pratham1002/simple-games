@@ -9,18 +9,17 @@ class ClueList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Expanded(
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(
-            child: _buildClueList('Across', clues['Across'] ?? []),
-          ),
-          Expanded(
-            child: _buildClueList('Down', clues['Down'] ?? []),
-          ),
-        ],
-      ),
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          child: _buildClueList('Across', clues['Across'] ?? []),
+        ),
+        const VerticalDivider(width: 1, color: Colors.black26),
+        Expanded(
+          child: _buildClueList('Down', clues['Down'] ?? []),
+        ),
+      ],
     );
   }
 
